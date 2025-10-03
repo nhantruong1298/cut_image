@@ -1,0 +1,54 @@
+# Cấu hình IDE và trình soạn thảo
+.idea
+.vscode
+
+# Cấu hình dự án Flutter
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.dart_tool/
+
+# Cấu hình bản dựng (build)
+/build
+/ios/Flutter/App.framework
+/ios/Flutter/engine
+/ios/Flutter/flutter_assets
+/ios/Flutter/Flutter.podspec
+/ios/Flutter/Generated.xcconfig
+
+# Android
+/android/local.properties
+/android/.gradle
+/android/build/
+/android/app/build/
+/android/app/.cxx/
+/android/app/.externalNativeBuild/
+
+# iOS/macOS
+/ios/.bundle/
+/ios/.symlinks/
+/ios/Pods/
+/ios/Flutter/
+/ios/Runner/GeneratedPluginRegistrant.swift
+/ios/Runner/Info.plist
+/macos/.build/
+/macos/Pods/
+
+# Web
+/web/
+
+# Windows
+/windows/
+
+# Linux
+/linux/
+
+# Các file bản địa (Native) tạm thời khác
+*~
+*.log
+*.sap
+*.sav
+*.swo
+*.swp
+.DS_Store
+Thumbs.db
