@@ -34,8 +34,7 @@
 /macos/.build/
 /macos/Pods/
 
-# Web
-/web/
+
 
 # Windows
 /windows/
