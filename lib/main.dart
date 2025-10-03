@@ -66,6 +66,9 @@ class _HomePageState extends State<HomePage> {
               SizedBox(height: screenWidth * 0.05),
               ElevatedButton(
                   onPressed: () async {
+                    imageFiles.clear();
+                    croppedImageBytes.clear();
+
                     imageFiles = await selectImageFolder();
                     setState(() {});
                   },
@@ -92,6 +95,8 @@ class _HomePageState extends State<HomePage> {
               SizedBox(height: screenWidth * 0.05),
               ElevatedButton(
                 onPressed: () async {
+                  croppedImageBytes.clear();
+
                   if (imageFiles.isNotEmpty) {
                     await Future.forEach(imageFiles, (file) async {
                       final cropped =
@@ -202,6 +207,12 @@ class _HomePageState extends State<HomePage> {
 
         html.Url.revokeObjectUrl(url);
       }
+
+      Future.delayed(const Duration(seconds: 1), () {
+        imageFiles.clear();
+        croppedImageBytes.clear();
+        setState(() {});
+      });
     }
   }
 }
