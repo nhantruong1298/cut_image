@@ -3,12 +3,14 @@
 import 'dart:ui';
 
 import 'package:archive/archive.dart';
+import 'package:cut_image/widgets/app_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 // ignore: avoid_web_libraries_in_flutter
 import 'dart:html' as html; // Chỉ dành cho web
+import 'package:image/image.dart' as img;
 
 void main() {
   runApp(const MainApp());
@@ -34,9 +36,9 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  List<PlatformFile> imageFiles = [];
+  List<Uint8List> selectedImages = [];
 
-  List<Uint8List> croppedImageBytes = [];
+  List<Uint8List> croppedImages = [];
   TextEditingController cropController = TextEditingController(text: '');
 
   double cropPercentage = 0.0;
@@ -81,63 +83,84 @@ class _HomePageState extends State<HomePage> {
                 children: [
                   ElevatedButton(
                       onPressed: () async {
-                        imageFiles.clear();
-                        croppedImageBytes.clear();
+                        selectedImages.clear();
+                        croppedImages.clear();
 
-                        imageFiles = await selectArchive();
+                        selectedImages = await selectArchive();
                         setState(() {});
                       },
                       child: const Text('select archive ')),
                   const SizedBox(width: 10),
                   ElevatedButton(
                       onPressed: () async {
-                        imageFiles.clear();
-                        croppedImageBytes.clear();
+                        selectedImages.clear();
+                        croppedImages.clear();
 
-                        imageFiles = await selectImages();
+                        selectedImages = await selectImages();
+                        _cropImages();
                         setState(() {});
                       },
                       child: const Text('select images ')),
                 ],
               ),
               SizedBox(height: screenWidth * 0.05),
-              if (imageFiles.isNotEmpty)
+              if (selectedImages.isNotEmpty)
                 SizedBox(
-                  height: 200,
+                  height: 300,
                   width: double.infinity,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
-                    itemCount: imageFiles.length,
+                    itemCount: selectedImages.length,
                     physics: const AlwaysScrollableScrollPhysics(),
                     itemBuilder: (context, index) {
                       return Container(
-                        width: 200,
-                        height: 200,
                         margin: const EdgeInsets.only(right: 10),
-                        child: Image.memory(imageFiles[index].bytes!),
+                        child: AppImage(
+                          data: selectedImages[index],
+                          onDelete: () => setState(() {
+                            selectedImages.removeAt(index);
+                            _cropImages();
+                          }),
+                          onRotate: () {
+                            rotateImageBytes(selectedImages[index], 90)
+                                .then((rotatedBytes) {
+                              if (rotatedBytes != null) {
+                                setState(() {
+                                  selectedImages[index] = rotatedBytes;
+                                  _cropImages();
+                                });
+                              }
+                            });
+                          },
+                        ),
                       );
                     },
                   ),
                 ),
               SizedBox(height: screenWidth * 0.05),
               ElevatedButton(
-                onPressed: _cropImages,
-                child: const Text('crop here!'),
+                onPressed: () {
+                  _cropImages();
+                },
+                child: const Text('Crop images'),
               ),
               SizedBox(height: screenWidth * 0.05),
-              if (croppedImageBytes.isNotEmpty)
+              if (croppedImages.isNotEmpty)
                 SizedBox(
-                  height: 200,
+                  height: 300,
+                  width: double.infinity,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
-                    itemCount: croppedImageBytes.length,
+                    itemCount: croppedImages.length,
                     physics: const AlwaysScrollableScrollPhysics(),
                     itemBuilder: (context, index) {
-                      return Container(
-                        width: 200,
-                        height: 200,
-                        margin: const EdgeInsets.only(right: 10),
-                        child: Image.memory(croppedImageBytes[index]),
+                      return SizedBox(
+                        width: 300,
+                        height: 300,
+                        child: AppImage(
+                          data: croppedImages[index],
+                          onTap: () {},
+                        ),
                       );
                     },
                   ),
@@ -156,15 +179,23 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Future<Uint8List?> rotateImageBytes(
+      Uint8List originalBytes, int angle) async {
+    img.Image? originalImage = img.decodeImage(originalBytes);
+    if (originalImage == null) return null;
+    img.Image rotatedImage = img.copyRotate(originalImage, angle: angle);
+    return Uint8List.fromList(img.encodeJpg(rotatedImage)); // Giả sử ảnh là JPG
+  }
+
   void _cropImages() async {
     cropPercentage = double.tryParse(cropController.text) ?? 0.0;
-    croppedImageBytes.clear();
+    croppedImages.clear();
 
-    if (imageFiles.isNotEmpty) {
-      await Future.forEach(imageFiles, (file) async {
-        final cropped = await cropImageFromTop(cropPercentage, file.bytes!);
+    if (selectedImages.isNotEmpty) {
+      await Future.forEach(selectedImages, (file) async {
+        final cropped = await cropImageFromTop(cropPercentage, file);
         if (cropped != null) {
-          croppedImageBytes.add(cropped);
+          croppedImages.add(cropped);
         }
       });
 
@@ -172,14 +203,14 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<List<PlatformFile>> selectImages() async {
-    final List<PlatformFile> imageFiles = [];
+  Future<List<Uint8List>> selectImages() async {
+    final List<Uint8List> imageFiles = [];
     try {
       FilePickerResult? result =
           await FilePicker.platform.pickFiles(allowMultiple: true);
 
       if (result != null) {
-        return result.files;
+        return result.files.map((file) => file.bytes!).toList();
       }
     } catch (e) {
       return [];
@@ -188,8 +219,8 @@ class _HomePageState extends State<HomePage> {
     return imageFiles;
   }
 
-  Future<List<PlatformFile>> selectArchive() async {
-    final List<PlatformFile> imageFiles = [];
+  Future<List<Uint8List>> selectArchive() async {
+    final List<Uint8List> imageFiles = [];
 
     try {
       // 1. Chọn Tệp Nén (chỉ cho phép chọn một tệp)
@@ -244,7 +275,11 @@ class _HomePageState extends State<HomePage> {
             path: null, // Path luôn là null trên Web
           );
 
-          imageFiles.add(platformFile);
+          if (platformFile.bytes == null) {
+            continue; // Bỏ qua nếu không có dữ liệu
+          }
+
+          imageFiles.add(platformFile.bytes!);
         }
       }
     } catch (e) {
@@ -290,16 +325,16 @@ class _HomePageState extends State<HomePage> {
 
   void downloadAllCroppedImages() {
     if (kIsWeb) {
-      if (croppedImageBytes.isEmpty) {
+      if (croppedImages.isEmpty) {
         return;
       }
 
       final encoder = ZipEncoder();
       final archive = Archive();
 
-      for (int i = 0; i < croppedImageBytes.length; i++) {
+      for (int i = 0; i < croppedImages.length; i++) {
         final fileName = 'cropped_image_$i.png';
-        final fileData = croppedImageBytes[i]; // Đây là Uint8List
+        final fileData = croppedImages[i]; // Đây là Uint8List
 
         archive.addFile(
           ArchiveFile(
@@ -323,8 +358,8 @@ class _HomePageState extends State<HomePage> {
       html.Url.revokeObjectUrl(url);
 
       Future.delayed(const Duration(seconds: 1), () {
-        imageFiles.clear();
-        croppedImageBytes.clear();
+        selectedImages.clear();
+        croppedImages.clear();
         setState(() {});
       });
     }
