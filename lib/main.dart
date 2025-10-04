@@ -322,7 +322,11 @@ class _HomePageState extends State<HomePage> {
 
       html.Url.revokeObjectUrl(url);
 
-      Future.delayed(const Duration(seconds: 1), () {});
+      Future.delayed(const Duration(seconds: 1), () {
+        imageFiles.clear();
+        croppedImageBytes.clear();
+        setState(() {});
+      });
     }
   }
 
