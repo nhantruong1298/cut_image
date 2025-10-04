@@ -12,6 +12,8 @@ import 'package:flutter/services.dart';
 import 'dart:html' as html; // Chỉ dành cho web
 import 'package:image/image.dart' as img;
 
+import 'widgets/full_image_viewer.dart';
+
 void main() {
   runApp(const MainApp());
 }
@@ -48,7 +50,7 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        cropController.text = '13';
+        cropController.text = '10';
       });
     });
   }
@@ -59,10 +61,9 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Text('Cut cut cut'),
-        surfaceTintColor: Colors.white,
-        backgroundColor: Colors.white,
-      ),
+          title: const Text('Cut cut cut'),
+          surfaceTintColor: Colors.white,
+          backgroundColor: Colors.white),
       body: SingleChildScrollView(
         child: Padding(
           padding: EdgeInsets.all(screenWidth * 0.05),
@@ -71,9 +72,7 @@ class _HomePageState extends State<HomePage> {
             children: [
               TextField(
                 decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  labelText: '% crop from top',
-                ),
+                    border: OutlineInputBorder(), labelText: '% crop from top'),
                 controller: cropController,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
@@ -81,102 +80,115 @@ class _HomePageState extends State<HomePage> {
               SizedBox(height: screenWidth * 0.05),
               Row(
                 children: [
-                  ElevatedButton(
-                      onPressed: () async {
-                        selectedImages.clear();
-                        croppedImages.clear();
-
-                        selectedImages = await selectArchive();
-                        setState(() {});
-                      },
-                      child: const Text('select archive ')),
-                  const SizedBox(width: 10),
-                  ElevatedButton(
-                      onPressed: () async {
-                        selectedImages.clear();
-                        croppedImages.clear();
-
-                        selectedImages = await selectImages();
-                        _cropImages();
-                        setState(() {});
-                      },
-                      child: const Text('select images ')),
+                  _buildSelectArchiveBtn(),
+                  const SizedBox(width: 20),
+                  _buildSelectImagesBtn()
                 ],
               ),
               SizedBox(height: screenWidth * 0.05),
-              if (selectedImages.isNotEmpty)
-                SizedBox(
-                  height: 300,
-                  width: double.infinity,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: selectedImages.length,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    itemBuilder: (context, index) {
-                      return Container(
-                        margin: const EdgeInsets.only(right: 10),
-                        child: AppImage(
-                          data: selectedImages[index],
-                          onDelete: () => setState(() {
-                            selectedImages.removeAt(index);
-                            _cropImages();
-                          }),
-                          onRotate: () {
-                            rotateImageBytes(selectedImages[index], 90)
-                                .then((rotatedBytes) {
-                              if (rotatedBytes != null) {
-                                setState(() {
-                                  selectedImages[index] = rotatedBytes;
-                                  _cropImages();
-                                });
-                              }
-                            });
-                          },
-                        ),
-                      );
-                    },
-                  ),
-                ),
+              if (selectedImages.isNotEmpty) _buildListSelectedImages(),
               SizedBox(height: screenWidth * 0.05),
               ElevatedButton(
-                onPressed: () {
-                  _cropImages();
-                },
-                child: const Text('Crop images'),
+                onPressed: () => _cropImages(),
+                child: const Text('Crop !!!'),
               ),
               SizedBox(height: screenWidth * 0.05),
-              if (croppedImages.isNotEmpty)
-                SizedBox(
-                  height: 300,
-                  width: double.infinity,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: croppedImages.length,
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    itemBuilder: (context, index) {
-                      return SizedBox(
-                        width: 300,
-                        height: 300,
-                        child: AppImage(
-                          data: croppedImages[index],
-                          onTap: () {},
-                        ),
-                      );
-                    },
-                  ),
-                ),
+              if (croppedImages.isNotEmpty) _buildListCroppedImages(),
               SizedBox(height: screenWidth * 0.05),
               ElevatedButton(
-                onPressed: () async {
-                  downloadAllCroppedImages();
-                },
-                child: const Text('save bitch!'),
+                onPressed: downloadAllCroppedImages,
+                child: const Text('Download the goods!  📸 ✨'),
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  SizedBox _buildListCroppedImages() {
+    return SizedBox(
+      height: 200,
+      width: double.infinity,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: croppedImages.length,
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: AppImage(
+              data: croppedImages[index],
+              onTap: () => _showFullImage(context, index),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  SizedBox _buildListSelectedImages() {
+    return SizedBox(
+      height: 200,
+      width: double.infinity,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: selectedImages.length,
+        physics: const AlwaysScrollableScrollPhysics(),
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: AppImage(
+              data: selectedImages[index],
+              onDelete: () => setState(() {
+                selectedImages.removeAt(index);
+              }),
+              onRotate: () {
+                rotateImageBytes(selectedImages[index], 90)
+                    .then((rotatedBytes) {
+                  if (rotatedBytes != null) {
+                    selectedImages[index] = rotatedBytes;
+                    setState(() {});
+                  }
+                });
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSelectImagesBtn() {
+    return ElevatedButton(
+        onPressed: () async {
+          _clearData(selectedImages: true, croppedImages: true);
+          selectedImages = await selectImages();
+          setState(() {});
+        },
+        child: const Text('Select images'));
+  }
+
+  Widget _buildSelectArchiveBtn() {
+    return ElevatedButton(
+        onPressed: () async {
+          _clearData(selectedImages: true, croppedImages: true);
+          selectedImages = await selectArchive();
+          setState(() {});
+        },
+        child: const Text('Select archive (zip)'));
+  }
+
+  void _clearData({
+    bool selectedImages = false,
+    bool croppedImages = false,
+  }) {
+    if (selectedImages) {
+      this.selectedImages.clear();
+    }
+    if (croppedImages) {
+      this.croppedImages.clear();
+    }
   }
 
   Future<Uint8List?> rotateImageBytes(
@@ -223,60 +235,46 @@ class _HomePageState extends State<HomePage> {
     final List<Uint8List> imageFiles = [];
 
     try {
-      // 1. Chọn Tệp Nén (chỉ cho phép chọn một tệp)
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         allowMultiple: false,
         type: FileType.custom,
-        // Tùy chọn: Gợi ý cho người dùng chọn tệp zip
         allowedExtensions: ['zip'],
       );
 
       if (result == null) {
-        return []; // Người dùng hủy
+        return [];
       }
 
       final PlatformFile zippedFile = result.files.single;
 
-      // QUAN TRỌNG: Trên Web, dữ liệu tệp được cung cấp trong thuộc tính 'bytes'
-      // chứ không phải 'path'.
       final Uint8List? fileBytes = zippedFile.bytes;
 
       if (fileBytes == null) {
-        // Điều này hiếm khi xảy ra nếu filePicker hoạt động đúng trên Web
         showError('Selected file has no data.');
         return [];
       }
 
-      // 2. Giải Nén Tệp từ Bytes
-      // Sử dụng ZipDecoder().decodeBytes() để giải nén trực tiếp từ Uint8List (bytes)
       final archive = ZipDecoder().decodeBytes(fileBytes);
 
-      // 3. Xử lý các Mục đã Giải Nén và Chuyển thành PlatformFile
       for (final file in archive.files) {
-        // Chỉ xử lý các tệp (bỏ qua các thư mục)
         if (!file.isFile) continue;
 
         final String fileName = file.name;
 
-        // Lọc các tệp hình ảnh
         if (fileName.toLowerCase().endsWith('.png') ||
             fileName.toLowerCase().endsWith('.jpg') ||
             fileName.toLowerCase().endsWith('.jpeg')) {
-          // Lấy dữ liệu (bytes) của file đã giải nén
-          // file.content luôn là Uint8List khi giải nén từ bộ nhớ
           final fileData = file.content;
 
-          // Tạo một PlatformFile mới, chỉ chứa tên và bytes,
-          // vì không có path trên Web
           final platformFile = PlatformFile(
             name: fileName,
             size: fileData.length,
-            bytes: fileData, // <--- Dữ liệu hình ảnh trong bộ nhớ
-            path: null, // Path luôn là null trên Web
+            bytes: fileData,
+            path: null,
           );
 
           if (platformFile.bytes == null) {
-            continue; // Bỏ qua nếu không có dữ liệu
+            continue;
           }
 
           imageFiles.add(platformFile.bytes!);
@@ -378,6 +376,19 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
+    );
+  }
+
+  void _showFullImage(BuildContext context, int initialIndex) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.9), // Màu nền tối
+      builder: (BuildContext context) {
+        return FullScreenImageViewer(
+          imagesBytes: croppedImages,
+          initialIndex: initialIndex,
+        );
+      },
     );
   }
 }
