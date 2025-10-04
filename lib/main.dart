@@ -1,5 +1,8 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'dart:ui';
 
+import 'package:archive/archive.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -34,15 +37,29 @@ class _HomePageState extends State<HomePage> {
   List<PlatformFile> imageFiles = [];
 
   List<Uint8List> croppedImageBytes = [];
+  TextEditingController cropController = TextEditingController(text: '');
 
   double cropPercentage = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        cropController.text = '13';
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: const Text('Cut cut cut'),
+        surfaceTintColor: Colors.white,
+        backgroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
         child: Padding(
@@ -55,24 +72,34 @@ class _HomePageState extends State<HomePage> {
                   border: OutlineInputBorder(),
                   labelText: '% crop from top',
                 ),
-                onChanged: (value) {
-                  setState(() {
-                    cropPercentage = double.tryParse(value) ?? 0.0;
-                  });
-                },
+                controller: cropController,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               ),
               SizedBox(height: screenWidth * 0.05),
-              ElevatedButton(
-                  onPressed: () async {
-                    imageFiles.clear();
-                    croppedImageBytes.clear();
+              Row(
+                children: [
+                  ElevatedButton(
+                      onPressed: () async {
+                        imageFiles.clear();
+                        croppedImageBytes.clear();
 
-                    imageFiles = await selectImageFolder();
-                    setState(() {});
-                  },
-                  child: const Text('select images bitch!')),
+                        imageFiles = await selectArchive();
+                        setState(() {});
+                      },
+                      child: const Text('select archive ')),
+                  const SizedBox(width: 10),
+                  ElevatedButton(
+                      onPressed: () async {
+                        imageFiles.clear();
+                        croppedImageBytes.clear();
+
+                        imageFiles = await selectImages();
+                        setState(() {});
+                      },
+                      child: const Text('select images ')),
+                ],
+              ),
               SizedBox(height: screenWidth * 0.05),
               if (imageFiles.isNotEmpty)
                 SizedBox(
@@ -94,21 +121,7 @@ class _HomePageState extends State<HomePage> {
                 ),
               SizedBox(height: screenWidth * 0.05),
               ElevatedButton(
-                onPressed: () async {
-                  croppedImageBytes.clear();
-
-                  if (imageFiles.isNotEmpty) {
-                    await Future.forEach(imageFiles, (file) async {
-                      final cropped =
-                          await cropImageFromTop(cropPercentage, file.bytes!);
-                      if (cropped != null) {
-                        croppedImageBytes.add(cropped);
-                      }
-                    });
-
-                    setState(() {});
-                  }
-                },
+                onPressed: _cropImages,
                 child: const Text('crop here!'),
               ),
               SizedBox(height: screenWidth * 0.05),
@@ -118,6 +131,7 @@ class _HomePageState extends State<HomePage> {
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     itemCount: croppedImageBytes.length,
+                    physics: const AlwaysScrollableScrollPhysics(),
                     itemBuilder: (context, index) {
                       return Container(
                         width: 200,
@@ -142,7 +156,23 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Future<List<PlatformFile>> selectImageFolder() async {
+  void _cropImages() async {
+    cropPercentage = double.tryParse(cropController.text) ?? 0.0;
+    croppedImageBytes.clear();
+
+    if (imageFiles.isNotEmpty) {
+      await Future.forEach(imageFiles, (file) async {
+        final cropped = await cropImageFromTop(cropPercentage, file.bytes!);
+        if (cropped != null) {
+          croppedImageBytes.add(cropped);
+        }
+      });
+
+      setState(() {});
+    }
+  }
+
+  Future<List<PlatformFile>> selectImages() async {
     final List<PlatformFile> imageFiles = [];
     try {
       FilePickerResult? result =
@@ -158,20 +188,83 @@ class _HomePageState extends State<HomePage> {
     return imageFiles;
   }
 
+  Future<List<PlatformFile>> selectArchive() async {
+    final List<PlatformFile> imageFiles = [];
+
+    try {
+      // 1. Chọn Tệp Nén (chỉ cho phép chọn một tệp)
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        allowMultiple: false,
+        type: FileType.custom,
+        // Tùy chọn: Gợi ý cho người dùng chọn tệp zip
+        allowedExtensions: ['zip'],
+      );
+
+      if (result == null) {
+        return []; // Người dùng hủy
+      }
+
+      final PlatformFile zippedFile = result.files.single;
+
+      // QUAN TRỌNG: Trên Web, dữ liệu tệp được cung cấp trong thuộc tính 'bytes'
+      // chứ không phải 'path'.
+      final Uint8List? fileBytes = zippedFile.bytes;
+
+      if (fileBytes == null) {
+        // Điều này hiếm khi xảy ra nếu filePicker hoạt động đúng trên Web
+        showError('Selected file has no data.');
+        return [];
+      }
+
+      // 2. Giải Nén Tệp từ Bytes
+      // Sử dụng ZipDecoder().decodeBytes() để giải nén trực tiếp từ Uint8List (bytes)
+      final archive = ZipDecoder().decodeBytes(fileBytes);
+
+      // 3. Xử lý các Mục đã Giải Nén và Chuyển thành PlatformFile
+      for (final file in archive.files) {
+        // Chỉ xử lý các tệp (bỏ qua các thư mục)
+        if (!file.isFile) continue;
+
+        final String fileName = file.name;
+
+        // Lọc các tệp hình ảnh
+        if (fileName.toLowerCase().endsWith('.png') ||
+            fileName.toLowerCase().endsWith('.jpg') ||
+            fileName.toLowerCase().endsWith('.jpeg')) {
+          // Lấy dữ liệu (bytes) của file đã giải nén
+          // file.content luôn là Uint8List khi giải nén từ bộ nhớ
+          final fileData = file.content;
+
+          // Tạo một PlatformFile mới, chỉ chứa tên và bytes,
+          // vì không có path trên Web
+          final platformFile = PlatformFile(
+            name: fileName,
+            size: fileData.length,
+            bytes: fileData, // <--- Dữ liệu hình ảnh trong bộ nhớ
+            path: null, // Path luôn là null trên Web
+          );
+
+          imageFiles.add(platformFile);
+        }
+      }
+    } catch (e) {
+      showError('Error selecting or extracting archive: $e');
+      return [];
+    }
+
+    return imageFiles;
+  }
+
   Future<Uint8List?> cropImageFromTop(
       double percentage, Uint8List imageBytes) async {
     try {
-      // Decode the image
       final image = await decodeImageFromList(imageBytes);
 
-      // Calculate crop height
       final cropHeight = (image.height * percentage / 100).round();
 
-      // Create a new canvas with cropped dimensions
       final recorder = PictureRecorder();
       final canvas = Canvas(recorder);
 
-      // Draw the cropped portion
       canvas.drawImageRect(
         image,
         Rect.fromLTWH(0, cropHeight.toDouble(), image.width.toDouble(),
@@ -190,30 +283,63 @@ class _HomePageState extends State<HomePage> {
 
       return byteData?.buffer.asUint8List();
     } catch (e) {
-      print('Error cropping image: $e');
+      showError('Error cropping image: $e');
       return null;
     }
   }
 
   void downloadAllCroppedImages() {
     if (kIsWeb) {
-      for (int i = 0; i < croppedImageBytes.length; i++) {
-        final blob = html.Blob([croppedImageBytes[i]]);
-        final url = html.Url.createObjectUrlFromBlob(blob);
-
-        final anchor = html.AnchorElement(href: url)
-          ..setAttribute('download', 'cropped_image_$i.png')
-          ..click();
-
-        html.Url.revokeObjectUrl(url);
+      if (croppedImageBytes.isEmpty) {
+        return;
       }
 
-      Future.delayed(const Duration(seconds: 1), () {
-        imageFiles.clear();
-        croppedImageBytes.clear();
-        setState(() {});
-      });
+      final encoder = ZipEncoder();
+      final archive = Archive();
+
+      for (int i = 0; i < croppedImageBytes.length; i++) {
+        final fileName = 'cropped_image_$i.png';
+        final fileData = croppedImageBytes[i]; // Đây là Uint8List
+
+        archive.addFile(
+          ArchiveFile(
+            fileName,
+            fileData.length,
+            fileData,
+          ),
+        );
+      }
+
+      final zipData = encoder.encode(archive);
+
+      final zipBytes = Uint8List.fromList(zipData);
+      final blob = html.Blob([zipBytes]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+
+      html.AnchorElement(href: url)
+        ..setAttribute('download', 'cropped_images.zip') // Tên tệp nén
+        ..click();
+
+      html.Url.revokeObjectUrl(url);
+
+      Future.delayed(const Duration(seconds: 1), () {});
     }
+  }
+
+  void showError(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -221,8 +347,8 @@ class WebScrollBehavior extends MaterialScrollBehavior {
   @override
   Set<PointerDeviceKind> get dragDevices => {
         PointerDeviceKind.touch,
-        PointerDeviceKind.mouse, // Thêm hỗ trợ cuộn bằng chuột
-        // Bạn có thể thêm các thiết bị khác nếu cần
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.stylus,
       };
 
   @override
