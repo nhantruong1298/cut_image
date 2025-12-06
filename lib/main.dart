@@ -39,9 +39,9 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   List<Uint8List> selectedImages = [];
-
   List<Uint8List> croppedImages = [];
   TextEditingController cropController = TextEditingController(text: '');
+  bool isLoading = false;
 
   double cropPercentage = 0.0;
 
@@ -50,7 +50,7 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        cropController.text = '10';
+        cropController.text = '12.5';
       });
     });
   }
@@ -61,7 +61,7 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-          title: const Text('Cut cut cut'),
+          title: const Text('Cắt Hình'),
           surfaceTintColor: Colors.white,
           backgroundColor: Colors.white),
       body: SingleChildScrollView(
@@ -72,32 +72,39 @@ class _HomePageState extends State<HomePage> {
             children: [
               TextField(
                 decoration: const InputDecoration(
-                    border: OutlineInputBorder(), labelText: '% crop from top'),
+                    border: OutlineInputBorder(),
+                    labelText: '% cắt từ trên xuống'),
                 controller: cropController,
-                keyboardType: TextInputType.number,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*'))
+                ],
               ),
               SizedBox(height: screenWidth * 0.05),
               Row(
                 children: [
                   _buildSelectArchiveBtn(),
                   const SizedBox(width: 20),
-                  _buildSelectImagesBtn()
+                  _buildComboBtn()
                 ],
               ),
               SizedBox(height: screenWidth * 0.05),
               if (selectedImages.isNotEmpty) _buildListSelectedImages(),
               SizedBox(height: screenWidth * 0.05),
               ElevatedButton(
-                onPressed: () => _cropImages(),
-                child: const Text('Crop !!!'),
+                onPressed: (isLoading || selectedImages.isEmpty)
+                    ? null
+                    : () => _cropImages(),
+                child: const Text('Cắt !!!'),
               ),
               SizedBox(height: screenWidth * 0.05),
               if (croppedImages.isNotEmpty) _buildListCroppedImages(),
               SizedBox(height: screenWidth * 0.05),
               ElevatedButton(
-                onPressed: downloadAllCroppedImages,
-                child: const Text('Download the goods!  📸 ✨'),
+                onPressed: (isLoading || croppedImages.isEmpty)
+                    ? null
+                    : downloadAllCroppedImages,
+                child: const Text('Tải về tất cả ảnh đã cắt!  📸 ✨'),
               ),
             ],
           ),
@@ -159,36 +166,53 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildSelectImagesBtn() {
+  Widget _buildComboBtn() {
     return ElevatedButton(
-        onPressed: () async {
-          _clearData(selectedImages: true, croppedImages: true);
-          selectedImages = await selectImages();
-          setState(() {});
-        },
-        child: const Text('Select images'));
+        onPressed: isLoading
+            ? null
+            : () async {
+                setState(() {
+                  isLoading = true;
+                  _clearData();
+                });
+                try {
+                  selectedImages = await selectArchive();
+                  if (selectedImages.isNotEmpty) {
+                    await _cropImages();
+                    downloadAllCroppedImages();
+                  }
+                } finally {
+                  setState(() {
+                    isLoading = false;
+                  });
+                }
+              },
+        child: const Text('Combo chọn + cắt + tải'));
   }
 
   Widget _buildSelectArchiveBtn() {
     return ElevatedButton(
-        onPressed: () async {
-          _clearData(selectedImages: true, croppedImages: true);
-          selectedImages = await selectArchive();
-          setState(() {});
-        },
-        child: const Text('Select archive (zip)'));
+        onPressed: isLoading
+            ? null
+            : () async {
+                setState(() {
+                  isLoading = true;
+                  _clearData();
+                });
+                try {
+                  selectedImages = await selectArchive();
+                } finally {
+                  setState(() {
+                    isLoading = false;
+                  });
+                }
+              },
+        child: const Text('Chọn file nén (zip)'));
   }
 
-  void _clearData({
-    bool selectedImages = false,
-    bool croppedImages = false,
-  }) {
-    if (selectedImages) {
-      this.selectedImages.clear();
-    }
-    if (croppedImages) {
-      this.croppedImages.clear();
-    }
+  void _clearData() {
+    selectedImages.clear();
+    croppedImages.clear();
   }
 
   Future<Uint8List?> rotateImageBytes(
@@ -199,7 +223,7 @@ class _HomePageState extends State<HomePage> {
     return Uint8List.fromList(img.encodeJpg(rotatedImage)); // Giả sử ảnh là JPG
   }
 
-  void _cropImages() async {
+  Future<void> _cropImages() async {
     cropPercentage = double.tryParse(cropController.text) ?? 0.0;
     croppedImages.clear();
 
@@ -215,21 +239,21 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<List<Uint8List>> selectImages() async {
-    final List<Uint8List> imageFiles = [];
-    try {
-      FilePickerResult? result =
-          await FilePicker.platform.pickFiles(allowMultiple: true);
+  // Future<List<Uint8List>> selectImages() async {
+  //   final List<Uint8List> imageFiles = [];
+  //   try {
+  //     FilePickerResult? result =
+  //         await FilePicker.platform.pickFiles(allowMultiple: true);
 
-      if (result != null) {
-        return result.files.map((file) => file.bytes!).toList();
-      }
-    } catch (e) {
-      return [];
-    }
+  //     if (result != null) {
+  //       return result.files.map((file) => file.bytes!).toList();
+  //     }
+  //   } catch (e) {
+  //     return [];
+  //   }
 
-    return imageFiles;
-  }
+  //   return imageFiles;
+  // }
 
   Future<List<Uint8List>> selectArchive() async {
     final List<Uint8List> imageFiles = [];
@@ -356,8 +380,7 @@ class _HomePageState extends State<HomePage> {
       html.Url.revokeObjectUrl(url);
 
       Future.delayed(const Duration(seconds: 1), () {
-        selectedImages.clear();
-        croppedImages.clear();
+        _clearData();
         setState(() {});
       });
     }
